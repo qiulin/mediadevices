@@ -1,6 +1,6 @@
 package camera
 
-// #cgo LDFLAGS: -lstrmiids -lole32 -lquartz
+// #cgo LDFLAGS: -lstrmiids -lole32 -loleaut32 -lquartz
 // #include <dshow.h>
 // #include "camera_windows.hpp"
 import "C"
@@ -12,7 +12,6 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/pion/mediadevices/pkg/driver"
 	"github.com/pion/mediadevices/pkg/frame"
 	"github.com/pion/mediadevices/pkg/io/video"
 	"github.com/pion/mediadevices/pkg/prop"
@@ -47,12 +46,14 @@ func Initialize() {
 		return
 	}
 
+	// Print the number of cameras
+	fmt.Printf("Number of cameras: %d\n", list.num)
+
+	// Print the camera names
 	for i := 0; i < int(list.num); i++ {
-		name := C.GoString(C.getName(&list, C.int(i)))
-		driver.GetManager().Register(&camera{name: name}, driver.Info{
-			Label:      name,
-			DeviceType: driver.Camera,
-		})
+		cName := C.getName(&list, C.int(i))
+		name := C.GoString(cName)
+		fmt.Printf("Camera %d: %s\n", i, name)
 	}
 
 	C.freeCameraList(&list, &errStr)
