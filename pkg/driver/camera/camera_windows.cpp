@@ -29,24 +29,126 @@ void printErr(HRESULT hr)
   fprintf(stderr, "%s\n", buf);
 }
 
+#define MAX_FRIENDLY_NAME_LENGTH    128
+#define MAX_MONIKER_NAME_LENGTH     256
+
+struct TDeviceName
+{
+    std::wstring FriendlyName;
+    std::wstring MonikerName;
+};
+
+char* ConvertTDeviceNameToString(const TDeviceName& deviceName)
+{
+    // Calculate the length of the resulting string
+    size_t totalLength = deviceName.FriendlyName.length() + deviceName.MonikerName.length() + 2; // +2 for separating character and null terminator
+
+    // Allocate memory for the resulting string
+    char* result = (char*)malloc(totalLength);
+    if (!result)
+    {
+        // Memory allocation failed
+        return nullptr;
+    }
+
+    // Copy the contents of FriendlyName to the result string
+    if (FAILED(StringCchCopyA(result, totalLength, std::string(deviceName.FriendlyName.begin(), deviceName.FriendlyName.end()).c_str())))
+    {
+        free(result);
+        return nullptr;
+    }
+
+    // Add a separating character between FriendlyName and MonikerName
+    if (FAILED(StringCchCatA(result, totalLength, "")))
+    {
+        free(result);
+        return nullptr;
+    }
+
+    // Append the contents of MonikerName to the result string
+    if (FAILED(StringCchCatA(result, totalLength, std::string(deviceName.MonikerName.begin(), deviceName.MonikerName.end()).c_str())))
+    {
+        free(result);
+        return nullptr;
+    }
+
+    return result;
+}
+
 // getCameraName returns name of the device.
 // returned pointer must be released by free() after use.
-char* getCameraName(IMoniker* moniker)
-{
-  LPOLESTR name;
-  if (FAILED(moniker->GetDisplayName(nullptr, nullptr, &name)))
-    return nullptr;
+char* getCameraName(IMoniker* pMoniker){
+    IPropertyBag *pPropBag = nullptr;
+    HRESULT hr = pMoniker->BindToStorage(nullptr, nullptr, IID_IPropertyBag, (void **)&pPropBag);
+    char* ret;
+    if (SUCCEEDED(hr))
+    {
+        VARIANT varName;
+        VariantInit(&varName);
+        hr = pPropBag->Read(L"FriendlyName", &varName, nullptr);
+        if (SUCCEEDED(hr))
+        {
+            TDeviceName device;
+            device.FriendlyName = varName.bstrVal;
 
-  std::string nameStr = utf16Decode(name);
-  char* ret = (char*)malloc(nameStr.size() + 1);
-  memcpy(ret, nameStr.c_str(), nameStr.size() + 1);
+            LPOLESTR pOleDisplayName = nullptr;
+            hr = pMoniker->GetDisplayName(nullptr, nullptr, &pOleDisplayName);
+            if (SUCCEEDED(hr))
+            {
+                device.MonikerName = pOleDisplayName;
+                CoTaskMemFree(pOleDisplayName);
+            }
 
-  LPMALLOC comalloc;
-  CoGetMalloc(1, &comalloc);
-  comalloc->Free(name);
+//            std::wcout << L"Friendly Name: " << device.FriendlyName << std::endl;
+//            std::wcout << L"Moniker Name: " << device.MonikerName << std::endl;
 
-  return ret;
+            // Add the device to the vectorDevices vector
+            // vectorDevices.push_back(device);
+
+            ret = ConvertTDeviceNameToString(device);
+        }
+        VariantClear(&varName);
+        pPropBag->Release();
+    }
+    return ret;
 }
+
+//{
+//    std::string nameStr;
+//	IPropertyBag *pPropBag;
+//    HRESULT hr = moniker->BindToStorage(NULL, NULL, IID_IPropertyBag, (void **)&pPropBag);
+//    if (SUCCEEDED(hr))
+//    {
+//        // 获取设备友好名
+//        VARIANT varName;
+//        VariantInit(&varName);
+//        hr = pPropBag->Read(L"FriendlyName", &varName, NULL);
+//        if (SUCCEEDED(hr))
+//        {
+//            StringCchCopy(nameStr, MAX_FRIENDLY_NAME_LENGTH, varName.bstrVal);
+//            std::wcout << nameStr << std::endl;
+//        }
+//        VariantClear(&varName);
+//        pPropBag->Release();
+//    }
+//    char* ret = (char*)malloc(nameStr.size() + 1);
+//    memcpy(ret, nameStr.c_str(), nameStr.size() + 1);
+//    return ret;
+//}
+//  LPOLESTR name;
+//  if (FAILED(moniker->GetDisplayName(nullptr, nullptr, &name)))
+//    return nullptr;
+//
+//  std::string nameStr = utf16Decode(name);
+//  char* ret = (char*)malloc(nameStr.size() + 1);
+//  memcpy(ret, nameStr.c_str(), nameStr.size() + 1);
+//
+//  LPMALLOC comalloc;
+//  CoGetMalloc(1, &comalloc);
+//  comalloc->Free(name);
+//
+//  return ret;
+//}
 
 // listCamera stores information of the devices to cameraList*.
 int listCamera(cameraList* list, const char** errstr)
